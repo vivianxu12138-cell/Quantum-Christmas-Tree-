@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Quantum Christmas V2.0 - 梦幻版</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #020205; }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+        #video-element { position: absolute; top: 0; left: 0; visibility: hidden; }
+        #ui-layer {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #fff; font-family: 'Arial', sans-serif; pointer-events: none; z-index: 10;
+            text-align: center; text-shadow: 0 0 20px rgba(0, 255, 100, 0.5); transition: opacity 1s;
+        }
+        .instruction {
+            position: absolute; bottom: 40px; width: 100%; text-align: center;
+            color: rgba(255,255,255,0.4); font-family: 'Courier New', sans-serif; 
+            font-size: 14px; z-index: 5; pointer-events: none; letter-spacing: 4px; text-transform: uppercase;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <h1 style="font-weight: 100; letter-spacing: 5px;">QUANTUM TREE <span style="font-size:0.5em; vertical-align: super;">V2</span></h1>
+        <p style="font-size: 12px; color: #666;">初始化粒子系统...</p>
+    </div>
+    <div class="instruction">Open Hand : Stardust &nbsp;|&nbsp; Close Fist : Christmas Tree</div>
+    
+    <div id="canvas-container"></div>
+    <video id="video-element"></video>
+
+<script>
+    // --- 1. 场景与视觉 ---
+    const scene = new THREE.Scene();
+    // 雾效更深邃，黑色偏一点点蓝
+    scene.fog = new THREE.FogExp2(0x020205, 0.0025);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.z = 28;
+    camera.position.y = 5;
+    camera.lookAt(0, 2, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 性能优化
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+    // --- 2. 梦幻粒子系统 ---
+    // 增加粒子数量到 12000，让它更细腻
+    const particleCount = 12000;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    
+    const treePositions = new Float32Array(particleCount * 3);
+    const scatterPositions = new Float32Array(particleCount * 3);
+
+    // 辅助对象用于颜色计算
+    const colorHelper = new THREE.Color();
+
+    for (let i = 0; i < particleCount; i++) {
+        const i3 = i * 3;
+
+        // --- A. 树的形态 (修复版) ---
+        // 我们使用归一化变量 t (0 到 1)
+        // t = 0 是树底，t = 1 是树顶
+        let t = i / particleCount; 
+        
+        // 1. 高度映射：从底部 -12 到 顶部 12
+        const h = -12 + t * 24;
+        
+        // 2. 半径映射：严格的圆锥公式。
+        // 底部宽(半径9)，顶部尖(半径0)。Math.pow让树形稍微向内凹一点，更优雅
+        const baseRadius = 9 * Math.pow((1 - t), 0.8); 
+        
+        // 3. 螺旋角度：随高度剧烈旋转，形成层级感
+        // t * 40 表示整个树大概转40圈
+        const angle = t * 40 + (Math.random() * 0.5); 
+        
+        // 4. 增加体积感：粒子不只在表面，也在内部一点点
+        // randomRadiusFactor 0.8~1.0，让树枝边缘有毛绒感
+        const r = baseRadius * (0.8 + Math.random() * 0.4);
+
+        treePositions[i3]     = Math.cos(angle) * r; // X
+        treePositions[i3 + 1] = h;                   // Y
+        treePositions[i3 + 2] = Math.sin(angle) * r; // Z
+
+        // 🌟 特殊处理：最后的 200 个粒子作为“树顶之星”
+        if (i > particleCount - 200) {
+            treePositions[i3]     = (Math.random() - 0.5) * 1.5;
+            treePositions[i3 + 1] = 12.5 + Math.random() * 1.5; // 在树顶悬浮
+            treePositions[i3 + 2] = (Math.random() - 0.5) * 1.5;
+        }
+
+        // --- B. 散点形态 (银河系效果) ---
+        // 扁平化的椭圆分布，像星云
+        const spreadR = 25 * Math.sqrt(Math.random());
+        const spreadAngle = Math.random() * Math.PI * 2;
+        
+        scatterPositions[i3]     = spreadR * Math.cos(spreadAngle);
+        scatterPositions[i3 + 1] = (Math.random() - 0.5) * 5; // Y轴压扁
+        scatterPositions[i3 + 2] = spreadR * Math.sin(spreadAngle);
+
+        // 初始位置
+        positions[i3] = scatterPositions[i3];
+        positions[i3 + 1] = scatterPositions[i3 + 1];
+        positions[i3 + 2] = scatterPositions[i3 + 2];
+
+        // --- C. 梦幻配色 ---
+        if (i > particleCount - 200) {
+            // 树顶：纯金/亮白
+            colorHelper.setHSL(0.15, 1.0, 0.8); 
+        } else {
+            // 树身：渐变色
+            // 色相(Hue): 底部蓝绿(0.45) -> 顶部嫩绿(0.25)
+            // 亮度(Lightness): 底部暗(0.3) -> 顶部亮(0.7)
+            const hue = 0.45 - (t * 0.2); 
+            const lightness = 0.3 + (t * 0.5);
+            colorHelper.setHSL(hue, 0.8, lightness);
+            
+            // 随机混入一点点红色装饰 (5%概率)
+            if (Math.random() < 0.05) colorHelper.setHex(0xFF3333);
+            // 随机混入一点点金色装饰 (5%概率)
+            if (Math.random() < 0.05) colorHelper.setHex(0xFFD700);
+        }
+
+        colors[i3]     = colorHelper.r;
+        colors[i3 + 1] = colorHelper.g;
+        colors[i3 + 2] = colorHelper.b;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+        size: 0.15, // 粒子变细
+        vertexColors: true,
+        blending: THREE.AdditiveBlending, // 强发光叠加
+        depthTest: false, // 禁用深度测试，产生全息感
+        transparent: true,
+        opacity: 0.8
+    });
+
+    const particles = new THREE.Points(geometry, material);
+    scene.add(particles);
+
+    // --- 3. 交互逻辑 ---
+    let targetState = 'SCATTER';
+    const videoElement = document.getElementById('video-element');
+    const uiLayer = document.getElementById('ui-layer');
+
+    function onResults(results) {
+        if(uiLayer.style.display !== 'none' && results.multiHandLandmarks) uiLayer.style.opacity = 0;
+
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            const landmarks = results.multiHandLandmarks[0];
+            const wrist = landmarks[0];
+            const tips = [8, 12, 16, 20];
+            let avgDist = 0;
+
+            tips.forEach(idx => {
+                const tip = landmarks[idx];
+                const d = Math.sqrt(Math.pow(tip.x - wrist.x, 2) + Math.pow(tip.y - wrist.y, 2));
+                avgDist += d;
+            });
+            avgDist /= 4;
+
+            // 握拳判定
+            if (avgDist < 0.3) {
+                targetState = 'TREE';
+            } else {
+                targetState = 'SCATTER';
+            }
+        }
+    }
+
+    const hands = new Hands({locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+    }});
+    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    hands.onResults(onResults);
+
+    const cameraUtils = new Camera(videoElement, {
+        onFrame: async () => { await hands.send({image: videoElement}); },
+        width: 640, height: 480
+    });
+    cameraUtils.start();
+
+    // --- 4. 渲染循环 ---
+    const clock = new THREE.Clock();
+
+    function animate() {
+        requestAnimationFrame(animate);
+        
+        const time = clock.getElapsedTime();
+        const currentPos = particles.geometry.attributes.position.array;
+        
+        // 动态呼吸参数
+        const breathe = Math.sin(time * 2) * 0.2; // 树的呼吸幅度
+
+        for (let i = 0; i < particleCount; i++) {
+            const idx = i * 3;
+            
+            let tx, ty, tz;
+
+            if (targetState === 'TREE') {
+                // 基础目标位置
+                tx = treePositions[idx];
+                ty = treePositions[idx+1];
+                tz = treePositions[idx+2];
+                
+                // 增加一点动态扰动，让树看起来像在闪烁/呼吸
+                // 只有在树的状态下才应用这个微小的呼吸位移
+                tx *= (1 + breathe * 0.05);
+                tz *= (1 + breathe * 0.05);
+
+            } else {
+                tx = scatterPositions[idx];
+                ty = scatterPositions[idx+1];
+                tz = scatterPositions[idx+2];
+                
+                // 散点模式下的漂浮动画 (模拟星云流动)
+                const drift = 0.05;
+                scatterPositions[idx]   += Math.cos(time * 0.5 + i) * drift;
+                scatterPositions[idx+1] += Math.sin(time * 0.3 + i) * drift;
+                scatterPositions[idx+2] += Math.sin(time * 0.5 + i) * drift;
+            }
+
+            // Lerp 插值 (0.06 的系数让动作稍微柔和一点，没那么生硬)
+            currentPos[idx]   += (tx - currentPos[idx]) * 0.06;
+            currentPos[idx+1] += (ty - currentPos[idx+1]) * 0.06;
+            currentPos[idx+2] += (tz - currentPos[idx+2]) * 0.06;
+        }
+
+        particles.geometry.attributes.position.needsUpdate = true;
+        
+        // 整体旋转
+        if (targetState === 'TREE') {
+            particles.rotation.y += 0.005; // 树状态转得快一点点，展示3D感
+        } else {
+            particles.rotation.y += 0.001; // 散点状态慢慢漂移
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    animate();
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+</script>
+</body>
+</html>
